@@ -1,5 +1,6 @@
 import struct
 import socket
+import array
 
 def chksum(packet: bytes) -> int:
     if len(packet) % 2 != 0:
@@ -25,21 +26,23 @@ class TCPPacket:
 		self.flags = flags
 
 	def build(self) -> bytes:
-		packet = struct.pack('!HHIIBBHHH', 
-							 self.src_port, 
-							 self.dst_host, 
-							 0, 
-							 0, 
-							 5 << 4, 
-							 self.flags, 
-							 8192, 
-							 0, 
-							 0)
+		packet = struct.pack(
+			'!HHIIBBHHH',
+			self.src_port,  # Source Port
+			self.dst_port,  # Destination Port
+			0,              # Sequence Number
+			0,              # Acknoledgement Number
+			5 << 4,         # Data Offset
+			self.flags,     # Flags
+			8192,           # Window
+			0,              # Checksum (initial value)
+			0               # Urgent pointer
+		)
 
-		p_hdr = struct.pack('!4s4sHH', socket.inet_aton(src_host), socket.inet_aton(dst_host), socket.IPPROTO_TCP, len(packet))
+		p_hdr = struct.pack('!4s4sHH', socket.inet_aton(self.src_host), socket.inet_aton(self.dst_host), socket.IPPROTO_TCP, len(packet))
 
 		checksum = chksum(p_hdr + packet)
 
-		packet = packet[:16] + checksum + packet[18:]
+		packet = packet[:16] + struct.pack('H', checksum) + packet[18:]
 
 		return packet
