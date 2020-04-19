@@ -2,7 +2,7 @@ import struct
 import socket
 import array
 
-def chksum(packet: bytes) -> int:
+def chksum(packet):
     if len(packet) % 2 != 0:
         packet += b'\0'
 
@@ -14,24 +14,26 @@ def chksum(packet: bytes) -> int:
 
 class TCPPacket:
 	def __init__(self,
-				 src_host:  str,
-				 src_port:  int,
-				 dst_host:  str,
-				 dst_port:  int,
-				 flags:     int = 0):
+				 src_host,
+				 src_port,
+				 dst_host,
+				 dst_port,
+				 flags = 0):
 		self.src_host = src_host
 		self.src_port = src_port
 		self.dst_host = dst_host
 		self.dst_port = dst_port
+		self.ack = 0
+		self.seq = 0
 		self.flags = flags
 
-	def build(self) -> bytes:
+	def build(self):
 		packet = struct.pack(
 			'!HHIIBBHHH',
 			self.src_port,  # Source Port
 			self.dst_port,  # Destination Port
-			0,              # Sequence Number
-			0,              # Acknoledgement Number
+			self.seq,              # Sequence Number
+			self.ack,              # Acknoledgement Number
 			5 << 4,         # Data Offset
 			self.flags,     # Flags
 			8192,           # Window
