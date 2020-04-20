@@ -13,9 +13,10 @@ class Part_of_segment:
 
 class Sniffer():
 
-	def __init__(self):
+	def __init__(self, ip):
 			self.TCP_stack = list()
 			self.stop = False
+			self.ip = ip
 
 	def stop(self):
 		self.stop = Start
@@ -67,8 +68,9 @@ class Sniffer():
 				src_ip = src
 				dst_ip = target
 
-				if proto == 6:
+				if proto == 6 and src != self.ip:
 					(src_port, dest_port, sequence, acknowledgement, flag_urg, flag_ack, flag_psh, flag_rst, flag_syn, flag_fin, data) = self.tcp_segment(data)
+
 					ack = acknowledgement
 					seq = sequence
 					sp = src_port
