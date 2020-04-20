@@ -1,5 +1,6 @@
 import socket
 import struct
+import asyncio
 
 class Part_of_segment:
 	def __init__(self, src_ip, dst_ip, sport, dport, ack, seq, flags):
@@ -54,14 +55,15 @@ class Sniffer():
 		return src_port, dest_port, sequence, acknowledgement, flag_urg, flag_ack, flag_psh, flag_rst, flag_syn, flag_fin, data[offset:]
 
 
-	def sniff():
+	async def sniff(self):
+
 		connection = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.ntohs(3))
 		global TCP_stack
 		
-		while !self.stop:
+		while not self.stop:
 			raw_data, addr = connection.recvfrom(65535)
 			dest_mac, src_mac, eth_proto, data = self.ethernet_frame(raw_data)
-
+			await asyncio.sleep(0)
 			if eth_proto == 8:
 				(version, header_length, ttl, proto, src, target, data) = self.ipv4_packet(data)
 
@@ -69,6 +71,7 @@ class Sniffer():
 				dst_ip = target
 
 				if proto == 6 and src != self.ip:
+
 					(src_port, dest_port, sequence, acknowledgement, flag_urg, flag_ack, flag_psh, flag_rst, flag_syn, flag_fin, data) = self.tcp_segment(data)
 
 					ack = acknowledgement
@@ -80,4 +83,14 @@ class Sniffer():
 					seg = Part_of_segment(src_ip, dst_ip, sp, dp, ack, seq, flags)
 
 					self.TCP_stack.append(seg)
+					#for i in self.TCP_stack:
+						#print('DST IP: {}'.format(i.dst_ip))
+						#print('DST PORT: {}'.format(i.dst_port))
+						#print('SRC IP: {}'.format(i.src_ip))
+						#print('SRC PORT: {}'.format(i.src_port))
+						#print('ACK: {}'.format(i.ack))
+						#print('SEQ: {}'.format(i.seq))
+						#print('FLAGS: {}'.format(i.flags))
+
+
 

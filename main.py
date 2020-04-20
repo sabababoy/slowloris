@@ -1,17 +1,15 @@
 import TCPackets
-import sniffer_TCP
+import Sniffer_TCP
 import socket
 import random
 import asyncio
-import threading
 
-sniffer = sniffer_TCP.Sniffer('')
 src_ip = ''
 src_port = None
 dst_ip = ''
 dst_port = None
+sniffer = Sniffer_TCP.Sniffer(src_ip)
 
-thread = threading.Thread(sniffer.sniff())
 
 async def send_syn():
 
@@ -29,7 +27,7 @@ async def send_syn():
 
 	for i in range(1):
 
-		s.sendto(packet, (dst_ip, dst_port))
+		s.sendto(packet.build(), (dst_ip, dst_port))
 
 		packet.seq = random.randint(0, 4294967295)
 
@@ -44,6 +42,7 @@ async def keep_connection_open():
 	s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
 
 	while True:
+		await asyncio.sleep(0)
 
 		if sniffer.TCP_stack:
 
@@ -53,5 +52,20 @@ async def keep_connection_open():
 				flags = 0b00010000 #ACK flag
 				packet = TCPackets.TCPPacket(src_ip, src_port, dst_ip, dst_port, flags)
 				packet.seq = response_packet.ack
-				packet.ack = response_packet.syn + 1
-				s.sendto(packet, (dst_ip, dst_port))
+				packet.ack = response_packet.seq + 1
+				s.sendto(packet.build(), (dst_ip, dst_port))
+				sniffer.TCP_stack.pop(0)
+
+async def main_loop():
+	t1 = asyncio.create_task(send_syn())
+	t2 = asyncio.create_task(keep_connection_open())
+	t3 = asyncio.create_task(sniffer.sniff())
+
+	await asyncio.gather(t1, t2, t3)
+
+
+asyncio.run(main_loop())
+
+
+
+
