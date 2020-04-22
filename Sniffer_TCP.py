@@ -63,6 +63,9 @@ class Sniffer():
 		while not self.stop:
 			raw_data, addr = connection.recvfrom(65535)
 			dest_mac, src_mac, eth_proto, data = self.ethernet_frame(raw_data)
+
+			captured = list()
+
 			await asyncio.sleep(0)
 			if eth_proto == 8:
 				(version, header_length, ttl, proto, src, target, data) = self.ipv4_packet(data)
@@ -82,7 +85,9 @@ class Sniffer():
 
 					seg = Part_of_segment(src_ip, dst_ip, sp, dp, ack, seq, flags)
 
-					self.TCP_stack.append(seg)
+					if seg not in captured:
+						self.TCP_stack.append(seg)
+						captured.append(seg)
 					#for i in self.TCP_stack:
 						#print('DST IP: {}'.format(i.dst_ip))
 						#print('DST PORT: {}'.format(i.dst_port))
