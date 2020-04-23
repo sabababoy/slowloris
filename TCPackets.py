@@ -26,6 +26,7 @@ class TCPPacket:
 		self.ack = 0
 		self.seq = 0
 		self.flags = flags
+		self.window = 8192
 
 	def build(self):
 		packet = struct.pack(
@@ -36,7 +37,7 @@ class TCPPacket:
 			self.ack,              # Acknoledgement Number
 			5 << 4,         # Data Offset
 			self.flags,     # Flags
-			8192,           # Window
+			self.window,           # Window
 			0,              # Checksum (initial value)
 			0               # Urgent pointer
 		)

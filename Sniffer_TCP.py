@@ -1,6 +1,7 @@
 import socket
 import struct
 import asyncio
+import select
 
 class Part_of_segment:
 	def __init__(self, src_ip, dst_ip, sport, dport, ack, seq, flags):
@@ -56,24 +57,25 @@ class Sniffer():
 
 
 	async def sniff(self):
-
+	
 		connection = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.ntohs(3))
-		global TCP_stack
-		
+		connection.setblocking(0)
+		input_packets = 0
 		while not self.stop:
+
+			#print('*** Input packets = {} ***'.format(input_packets))
+			
 			raw_data, addr = connection.recvfrom(65535)
+
 			dest_mac, src_mac, eth_proto, data = self.ethernet_frame(raw_data)
-
-			captured = list()
-
-			await asyncio.sleep(0)
+			
 			if eth_proto == 8:
 				(version, header_length, ttl, proto, src, target, data) = self.ipv4_packet(data)
 
 				src_ip = src
 				dst_ip = target
 
-				if proto == 6 and src != self.ip:
+				if src != self.ip and proto == 6:
 
 					(src_port, dest_port, sequence, acknowledgement, flag_urg, flag_ack, flag_psh, flag_rst, flag_syn, flag_fin, data) = self.tcp_segment(data)
 
@@ -84,18 +86,21 @@ class Sniffer():
 					flags = {'U': flag_urg, 'A': flag_ack, 'P': flag_psh, 'R': flag_rst, 'S': flag_syn, 'F': flag_fin}
 
 					seg = Part_of_segment(src_ip, dst_ip, sp, dp, ack, seq, flags)
-
-					if seg not in captured:
-						self.TCP_stack.append(seg)
-						captured.append(seg)
+					
+					self.TCP_stack.append(seg)
+					input_packets += 1
+						
+			await asyncio.sleep(0)
+			
 					#for i in self.TCP_stack:
-						#print('DST IP: {}'.format(i.dst_ip))
-						#print('DST PORT: {}'.format(i.dst_port))
-						#print('SRC IP: {}'.format(i.src_ip))
-						#print('SRC PORT: {}'.format(i.src_port))
-						#print('ACK: {}'.format(i.ack))
-						#print('SEQ: {}'.format(i.seq))
-						#print('FLAGS: {}'.format(i.flags))
-
+					#	print('DST IP: {}'.format(i.dst_ip))
+					#	print('DST PORT: {}'.format(i.dst_port))
+					#	print('SRC IP: {}'.format(i.src_ip))
+					#	print('SRC PORT: {}'.format(i.src_port))
+					#	print('ACK: {}'.format(i.ack))
+					#	print('SEQ: {}'.format(i.seq))
+					#	print('FLAGS: {}'.format(i.flags))
+			
+			
 
 
