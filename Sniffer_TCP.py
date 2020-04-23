@@ -63,43 +63,38 @@ class Sniffer():
 		input_packets = 0
 		while not self.stop:
 
-			#print('*** Input packets = {} ***'.format(input_packets))
+			ready = select.select([connection], [], [], 0)
 			
-			raw_data, addr = connection.recvfrom(65535)
+			if ready[0]:
+				raw_data, addr = connection.recvfrom(65535)
 
-			dest_mac, src_mac, eth_proto, data = self.ethernet_frame(raw_data)
+				dest_mac, src_mac, eth_proto, data = self.ethernet_frame(raw_data)
+
 			
-			if eth_proto == 8:
-				(version, header_length, ttl, proto, src, target, data) = self.ipv4_packet(data)
+			
+				if eth_proto == 8:
+					(version, header_length, ttl, proto, src, target, data) = self.ipv4_packet(data)
 
-				src_ip = src
-				dst_ip = target
+					src_ip = src
+					dst_ip = target
 
-				if src != self.ip and proto == 6:
+					if src != self.ip and proto == 6:
+						#print('*** Input packets = {}***'.format(input_packets))
+						(src_port, dest_port, sequence, acknowledgement, flag_urg, flag_ack, flag_psh, flag_rst, flag_syn, flag_fin, data) = self.tcp_segment(data)
 
-					(src_port, dest_port, sequence, acknowledgement, flag_urg, flag_ack, flag_psh, flag_rst, flag_syn, flag_fin, data) = self.tcp_segment(data)
+						ack = acknowledgement
+						seq = sequence
+						sp = src_port
+						dp = dest_port
+						flags = {'U': flag_urg, 'A': flag_ack, 'P': flag_psh, 'R': flag_rst, 'S': flag_syn, 'F': flag_fin}
 
-					ack = acknowledgement
-					seq = sequence
-					sp = src_port
-					dp = dest_port
-					flags = {'U': flag_urg, 'A': flag_ack, 'P': flag_psh, 'R': flag_rst, 'S': flag_syn, 'F': flag_fin}
-
-					seg = Part_of_segment(src_ip, dst_ip, sp, dp, ack, seq, flags)
+						seg = Part_of_segment(src_ip, dst_ip, sp, dp, ack, seq, flags)
 					
-					self.TCP_stack.append(seg)
-					input_packets += 1
+						self.TCP_stack.append(seg)
+						#input_packets += 1
 						
 			await asyncio.sleep(0)
 			
-					#for i in self.TCP_stack:
-					#	print('DST IP: {}'.format(i.dst_ip))
-					#	print('DST PORT: {}'.format(i.dst_port))
-					#	print('SRC IP: {}'.format(i.src_ip))
-					#	print('SRC PORT: {}'.format(i.src_port))
-					#	print('ACK: {}'.format(i.ack))
-					#	print('SEQ: {}'.format(i.seq))
-					#	print('FLAGS: {}'.format(i.flags))
 			
 			
 
