@@ -1,0 +1,93 @@
+This repository, the second attempt to implement a script to conduct slowloris attacks. 
+https://github.com/sabababoy/http-slowloris
+The first project is working. It can stop the server on + - 500 connections, which is very small. 
+Also, he had drawbacks of which the two most important ones were incorrect implementation and, as a result, speed. 
+Having studied everything in more detail, I realized that the main problem is that the connection is established through 
+the socket (AF_INET, AF_STREAM), leaving the entire implementation to the kernel connection. 
+The socket.connect() function blocks I/O and makes it impossible to send the next packet until the answer to the first comes. 
+Because of this, it was decided to use raw sockets and establish all connections manually. Sending a packet with the SYN 
+flag separately, separately accept the response, send ACKs and requests (implement the TCP stack manually). 
+Using methods of asynchronous programming, you can achieve acceleration of work at times. At the moment, to use asynchronous 
+programming, it was decided to use the asyncio library.
+
+IMPORTANT: Because work goes without kernel core, OS sends an RST packet. To fix this you need to configure iptables:
+sudo iptables -I OUTPUT -p tcp --tcp-flags ALL RST, ACK -j DROP
+
+Commit a65263e599a4f07b11b34ace45832753ee8f8560
+
+The TCPPacket class is implemented, which manually builds the TCP segment header. Conducted a small test:
+1) I checked with WireShark that the packets are built correctly and reach the address, since the server sent an answer to 
+all segments. (Sequence Number varied randomly in the range from 0 to 4294967295)
+2) 1000 one-way packets were sent in ~ 0.01 seconds.
+
+Commit 1b8b5a76c2d4dbfcc3f59d76683060388c920f1a
+
+The TCPPacket class has changed a bit. Now the contents of the package are a properties (Seq, Ack and Flags). Because of 
+this, you can simply change the properties of one instance of the class, and not create a new instance each time.
+Added Sniffer class, with sniff() method and TCP_stack property. Sniff() parses only TCP packets and adds data to TCP_stack. 
+(Important: it is not TCPPacket class instances that get on the stack, but only data about flags, Sequence Number, 
+Acknoledgement Number, ports and ip addresses.) All packets are built and analyzed manually.
+
+Commit 3fc8cae99efe26ea546a3a0482dbb712baeefc75
+
+Sniffer adds only incoming packets from the attacked host to TCP_stack
+Implementation of the keep_connection_open function has been started to open and maintain a connection
+
+Commit 1c1b0746c25613d4757c800f47158879e1ef3caf
+
+Bugfix and TCP handshake implementation. Packets are built manually using the TCPPacket class added earlier. 
+Incoming packets are processed using the Sniffer class and the sniff() method. The send_syn() function sends packets with 
+the SYN flag, then the keep_connection_open() function establishes a connection.
+
+Commit 10f1a470dcc646a785bdb359b10c299520f63d4c
+
+Created class Connection for storing connections. It stores the socket address (port, IP) + ack and seq numbers for 
+further work with the connection. The TCP Handshake function is now called connect(). After the connection is 
+established, a packet with an incomplete HTTP request is sent.
+
+Commit 913c5dac3ed2d595f1e8de35a17783318ccd9613
+
+user agents were added
+
+Commit ecd2bae284d3ee6a30b7ba8b17b3361784671263
+
+The error "TCP Dup ACK" caused by "TCP Retransmission" has been fixed. Since the ACK SYN packet was duplicated due 
+to the fact that the program did not have time to respond to the first packet in a timely manner, both fell into the stack. 
+Now, if the connection is already established, it will not respond to repeated packets.
+Added keep_connection_open() function to maintain connection. The function sends the generated string every 10 seconds.
+
+Commit 27ec326175475c81877ea945e200c757b68c5ade
+
+Fixed bug "TCP Port Number Reused". Previously, the port from which the connections were established was randomly selected 
+each time, now the free_ports_init() function is added, which returns a list of unused ports. Further from them the one 
+from which the connection is established and removed from the list is already vibrating so as not to reuse it.
+
+Commit 25f085548e5b56d038870f9f548512c043942def
+
+There is a problem. During the analysis of the program in WireShark, it was found that the server does not respond to 
+PSH/ACK packets with data, therefore they do not reach. I decided to check the scapy library and release tcp handshake 
+using scapy. Responses to segments with data came -> Problem with TCPPacket and packet building.
+A new_main.py file has been added in which the implementation of solowloris with scapy is written. 
+Since the sr1 function sends a packet and waits for a response, I/O is blocked -> in this implementation, 
+the threading module is used. Each connection is established with the help of a separate thread and then works in parallel.
+
+Commit 483f8d223b0ad53d6a381643112166025e4be683
+
+Bugfix in new_main.py. There was a problem with threads, the solution of which I could not find (Contact me if you know how 
+to fix it). The thread is blocked in a random place at runtime, as a result, it is impossible to clearly control the 
+sending of packets in time, which leads to a shutdown.
+It was decided to use a mixture of two implementations. Manual packet building through the native TCPPacket and scapy class. 
+Scapy works a little longer, so wherever time is a critical factor, the fast implementation of TCPacket is used (in 
+connection setup). To send packets with data (request) scapy is used. (If you know how to solve the problem with TCPPacket 
+and data, please, contact me).
+Also, when a server closes a connection, the program confirms the closure and opens a new connection. All responses 
+from ACK to segments with data are processed. By changing seq and ack numbers in Connections objects.
+
+Сommit f6dd2bfe281eb67ca4b3c0acddc01edade0a8308
+
+Processing of ACK packets has been removed since it is not needed (+ function did not always manage to process everything 
+and lost connections). seq number changes simply by adding the length of the data sent. The function of checking open ports 
+on the server has been implemented. And, temporarily, a small interface for working from the console (IP input, selection of 
+an open port, number of connections). 
+There is no automation and termination of the connection after the host is overloaded. Also, for further implementation, 
+work with DB and proxy is left, as well as SSL for working with HTTPS.
