@@ -56,8 +56,8 @@ class Sniffer():
 		return src_port, dest_port, sequence, acknowledgement, flag_urg, flag_ack, flag_psh, flag_rst, flag_syn, flag_fin, data[offset:]
 
 
-	async def sniff(self):
-	
+	def sniff(self):
+		print('Begin sniffing...')
 		connection = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.ntohs(3))
 		connection.setblocking(0)
 		input_packets = 0
@@ -66,6 +66,7 @@ class Sniffer():
 			ready = select.select([connection], [], [], 0)
 			
 			if ready[0]:
+				
 				raw_data, addr = connection.recvfrom(65535)
 
 				dest_mac, src_mac, eth_proto, data = self.ethernet_frame(raw_data)
@@ -73,12 +74,14 @@ class Sniffer():
 			
 			
 				if eth_proto == 8:
+					
 					(version, header_length, ttl, proto, src, target, data) = self.ipv4_packet(data)
 
 					src_ip = src
 					dst_ip = target
 
 					if src != self.ip and proto == 6:
+						
 						#print('*** Input packets = {}***'.format(input_packets))
 						(src_port, dest_port, sequence, acknowledgement, flag_urg, flag_ack, flag_psh, flag_rst, flag_syn, flag_fin, data) = self.tcp_segment(data)
 
@@ -93,7 +96,7 @@ class Sniffer():
 						self.TCP_stack.append(seg)
 						#input_packets += 1
 						
-			await asyncio.sleep(0)
+			#await asyncio.sleep(0)
 			
 			
 			
