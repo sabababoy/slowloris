@@ -1,3 +1,6 @@
+Important: The main idea of the project was not to attack something/someone, but study the operation of networks, implement basiс TCP stack and working with assync libs.
+Tested on sites that run on port 80 (It works, The host stops accepting requests)
+
 This repository, the second attempt to implement a script to conduct slowloris attacks. 
 https://github.com/sabababoy/http-slowloris
 The first project is working. It can stop the server on + - 500 connections, which is very small. 
@@ -91,3 +94,12 @@ on the server has been implemented. And, temporarily, a small interface for work
 an open port, number of connections). 
 There is no automation and termination of the connection after the host is overloaded. Also, for further implementation, 
 work with DB and proxy is left, as well as SSL for working with HTTPS.
+
+Commit e40b74737a135987373dd6725432f666f763f227
+
+Added SQLite database to record the maximum number of host connections. Checking of the possibility of creating new connections was also added to recognize the maximum number of connections.
+
+Commit 9dbe2d287539682e2e0cacff6da4669185e714f2
+
+Added threading module to increase program speed and stability. Threads work together with the program's asynchronous operation. Now the function of sending a packet does not make you wait. Also, sniffing of incoming packets occurs constantly. (When the sniffer worked asynchronously, incoming packets were sometimes lost, which resulted in TCP Retransmission)
+Slowloris was tested on websites that run on 80 port. The host stops accepting requestsю
